@@ -1,0 +1,195 @@
+# enhanced_database_viewer.py
+# Enhanced database viewer for the new 3-table structure
+
+import sqlite3
+from datetime import datetime
+import os
+
+def view_enhanced_database(db_path="ransomware_analysis.db"):
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        print("ENHANCED RANSOMWARE DETECTION DATABASE VIEWER")
+        print("="*60)
+        print(f"Database: {db_path}")
+        print()
+        
+        # Check available tables
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [table[0] for table in cursor.fetchall()]
+        print(f"Available tables: {', '.join(tables)}")
+        print()
+        
+        # 1. OVERALL SYSTEM SUMMARY
+        if 'analysis_summary' in tables:
+            print("1. OVERALL SYSTEM SUMMARY")
+            print("-" * 40)
+            cursor.execute("SELECT * FROM analysis_summary WHERE id = 1")
+            summary = cursor.fetchone()
+            
+            if summary:
+                print(f"   Total Files Analyzed: {summary[1]}")
+                print(f"   Ransomware Detected: {summary[2]}")
+                print(f"   Benign Files: {summary[3]}")
+                print(f"   Total Processing Time: {summary[4]:.2f} ms")
+                print(f"   Average Confidence: {summary[5]:.1%}" if summary[5] else "   Average Confidence: N/A")
+                print(f"   Average Processing Time: {summary[6]:.2f} ms" if summary[6] else "   Average Processing Time: N/A")
+                print(f"   Highest Confidence: {summary[7]:.1%}" if summary[7] else "   Highest Confidence: N/A")
+                print(f"   Lowest Confidence: {summary[8]:.1%}" if summary[8] else "   Lowest Confidence: N/A")
+                print(f"   First Analysis: {summary[9] or 'None'}")
+                print(f"   Last Analysis: {summary[10] or 'None'}")
+                print(f"   Last Updated: {summary[11] or 'None'}")
+            else:
+                print("   No summary data available")
+            print()
+        
+        # 2. TODAY'S STATISTICS
+        if 'daily_statistics' in tables:
+            print("2. TODAY'S STATISTICS")
+            print("-" * 25)
+            cursor.execute("SELECT * FROM daily_statistics WHERE analysis_date = DATE('now')")
+            today_stats = cursor.fetchone()
+            
+            if today_stats:
+                print(f"   Files Analyzed Today: {today_stats[2]}")
+                print(f"   Ransomware Detected Today: {today_stats[3]}")
+                print(f"   Benign Files Today: {today_stats[4]}")
+                print(f"   Average Confidence Today: {today_stats[5]:.1%}" if today_stats[5] else "   Average Confidence Today: N/A")
+                print(f"   Total Processing Time Today: {today_stats[6]:.2f} ms" if today_stats[6] else "   Total Processing Time Today: N/A")
+            else:
+                print("   No analyses performed today")
+            print()
+        
+        # 3. RECENT FILE ANALYSES (Last 15)
+        if 'file_analysis' in tables:
+            print("3. RECENT FILE ANALYSES")
+            print("-" * 30)
+            cursor.execute("""
+                SELECT id, analysis_timestamp, file_name, file_source, prediction_result, 
+                       confidence_score, probability_ransomware, probability_benign, 
+                       is_ransomware, processing_time_ms, client_ip
+                FROM file_analysis
+                ORDER BY analysis_timestamp DESC
+                LIMIT 15
+            """)
+            
+            analyses = cursor.fetchall()
+            
+            if analyses:
+                print(f"{'ID':3} {'Time':14} {'File':20} {'Source':10} {'Result':8} {'Conf':7} {'P(R)':6} {'P(B)':6} {'Time':6} {'Client':10}")
+                print("-" * 95)
+                
+                for analysis in analyses:
+                    (id_val, timestamp, file_name, file_source, prediction, 
+                     confidence, prob_r, prob_b, is_ransomware, proc_time, client_ip) = analysis
+                    
+                    # Format timestamp
+                    try:
+                        dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+                        time_str = dt.strftime('%m/%d %H:%M')
+                    except:
+                        time_str = str(timestamp)[:14] if timestamp else "Unknown"
+                    
+                    # Truncate file name
+                    display_name = file_name[:17] + "..." if file_name and len(file_name) > 20 else (file_name or "Unknown")
+                    
+                    # Format values
+                    source = (file_source or "Unknown")[:8]
+                    result_short = "RANSOM" if is_ransomware else "BENIGN"
+                    conf_str = f"{confidence:.1%}" if confidence else "N/A"
+                    prob_r_str = f"{prob_r:.2f}" if prob_r else "N/A"
+                    prob_b_str = f"{prob_b:.2f}" if prob_b else "N/A"
+                    time_ms = f"{proc_time:.1f}" if proc_time else "N/A"
+                    client = (client_ip or "Local")[:8]
+                    
+                    print(f"{id_val:3} {time_str:14} {display_name:20} {source:10} {result_short:8} {conf_str:7} {prob_r_str:6} {prob_b_str:6} {time_ms:6} {client:10}")
+            else:
+                print("   No file analyses found")
+            print()
+        
+        # 4. WEEKLY TREND (Last 7 Days)
+        if 'daily_statistics' in tables:
+            print("4. WEEKLY TREND (Last 7 Days)")
+            print("-" * 35)
+            cursor.execute("""
+                SELECT analysis_date, files_analyzed_today, ransomware_detected_today, 
+                       benign_files_today, avg_confidence_today
+                FROM daily_statistics
+                WHERE analysis_date >= DATE('now', '-7 days')
+                ORDER BY analysis_date DESC
+            """)
+            
+            weekly_data = cursor.fetchall()
+            
+            if weekly_data:
+                print(f"{'Date':12} {'Files':6} {'Ransom':7} {'Benign':7} {'Avg Conf':9}")
+                print("-" * 45)
+                
+                for day_data in weekly_data:
+                    date, files, ransomware, benign, avg_conf = day_data
+                    conf_str = f"{avg_conf:.1%}" if avg_conf else "N/A"
+                    print(f"{date:12} {files:6} {ransomware:7} {benign:7} {conf_str:9}")
+            else:
+                print("   No weekly data available")
+            print()
+        
+        # 5. CONFIDENCE DISTRIBUTION
+        if 'file_analysis' in tables:
+            print("5. CONFIDENCE DISTRIBUTION")
+            print("-" * 30)
+            cursor.execute("""
+                SELECT 
+                    COUNT(CASE WHEN confidence_score >= 0.9 THEN 1 END) as high_conf,
+                    COUNT(CASE WHEN confidence_score >= 0.7 AND confidence_score < 0.9 THEN 1 END) as med_conf,
+                    COUNT(CASE WHEN confidence_score < 0.7 THEN 1 END) as low_conf,
+                    COUNT(*) as total
+                FROM file_analysis
+                WHERE confidence_score IS NOT NULL
+            """)
+            
+            conf_dist = cursor.fetchone()
+            
+            if conf_dist and conf_dist[3] > 0:
+                high, med, low, total = conf_dist
+                print(f"   High Confidence (>90%): {high} files ({high/total*100:.1f}%)")
+                print(f"   Medium Confidence (70-90%): {med} files ({med/total*100:.1f}%)")
+                print(f"   Low Confidence (<70%): {low} files ({low/total*100:.1f}%)")
+                print(f"   Total: {total} files")
+            else:
+                print("   No confidence data available")
+            print()
+        
+        conn.close()
+        
+    except Exception as e:
+        print(f"Error reading database: {e}")
+        import traceback
+        traceback.print_exc()
+
+def main():
+    # Check common database locations
+    db_locations = [
+        "ransomware_analysis.db",
+        "C:\\RansomwareDetector\\ransomware_analysis.db",
+        "C:\\RansomwareDetector\\server\\ransomware_analysis.db",
+        "server\\ransomware_analysis.db"
+    ]
+    
+    db_found = False
+    for db_path in db_locations:
+        if os.path.exists(db_path):
+            print(f"Found enhanced database at: {db_path}")
+            view_enhanced_database(db_path)
+            db_found = True
+            break
+    
+    if not db_found:
+        print("Enhanced database not found.")
+        print("Looking for: ransomware_analysis.db")
+        print()
+        print("Make sure you're running the new enhanced server that creates")
+        print("the 3-table database structure (file_analysis, analysis_summary, daily_statistics)")
+
+if __name__ == "__main__":
+    main()

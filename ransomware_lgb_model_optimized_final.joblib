@@ -1,0 +1,6 @@
+@echo off
+echo Starting Ransomware Detection Client...
+echo ======================================
+cd C:\RansomwareDetector\client
+python ransomware_detection_client.py
+pause
